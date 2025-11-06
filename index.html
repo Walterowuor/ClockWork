@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -66,8 +27,11 @@
     <div id="background-layer"></div>
     <div id="content-layer">
         <div class="controls">
-            <button id="calendar-toggle" aria-label="Toggle Calendar">🗓️</button>
+            <button id="calendar-toggle" aria-label="Toggle Calendar">📓</button>
             <button id="settings-toggle" aria-label="Toggle Settings">⚙️</button>
+            <!-- Added: Alarm and Notes controls -->
+            <button id="clock-alarm-btn" title="Alarm" aria-label="Alarm" class="icon-btn">⏰</button>
+            <button id="clock-notes-btn" title="Notes" aria-label="Notes" class="icon-btn">📝</button>
         </div>
         <canvas id="analog-clock" width="300" height="300"></canvas>
         <div id="time-area">
@@ -91,6 +55,8 @@
                 <button id="next-month" style="background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer;">›</button>
             </div>
             <div id="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;"></div>
+            <!-- Floating calendar body used for migrated events -->
+            <div id="floating-calendar-body" style="margin-top:12px; font-size:0.9rem; max-height:220px; overflow:auto;"></div>
         </div>
         <div class="panel floating-panel dev-console hidden" id="dev-console">
             <h3>🔓 Developer Console</h3>
@@ -211,7 +177,45 @@
                 <button class="btn reset" id="reset-countdown">Reset</button>
             </div>
         </div>
+
+        <!-- Floating Alarm Panel -->
+        <div id="alarm-panel" class="floating-panel hidden" aria-hidden="true">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Alarm</strong>
+            <button class="floating-close" data-target="#alarm-panel">✕</button>
+          </div>
+          <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+            <label>Alarm time: <input type="time" id="alarm-time"></label>
+            <label>Label: <input type="text" id="alarm-label" placeholder="Alarm label"></label>
+            <div style="display:flex; gap:8px;"><button id="set-alarm" class="btn start">Set Alarm</button><button id="stop-alarm" class="btn stop hidden">Stop Alarm</button></div>
+          </div>
+        </div>
+
+        <!-- Floating Notes Panel -->
+        <div id="notes-panel" class="floating-panel hidden" aria-hidden="true">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Notes</strong>
+            <button class="floating-close" data-target="#notes-panel">✕</button>
+          </div>
+          <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input id="note-filename" placeholder="note-name.md" style="flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:#fff;" />
+              <input type="color" id="note-color" title="Note color" value="#ffffff" />
+              <button id="toggle-obfuscate" class="btn">Obfuscate</button>
+            </div>
+            <textarea id="notes-editor" rows="12" placeholder="Type notes here..." style="width:100%; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.2); color:#fff;"></textarea>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span id="notes-status" style="font-size:0.85rem; color:rgba(255,255,255,0.8);"></span>
+              <div style="display:flex; gap:8px;"><button id="save-note-now" class="btn">Save Now</button><button id="download-note" class="btn reset">Download</button></div>
+            </div>
+          </div>
+        </div>
+
     </div>
+
+    <!-- Fullscreen flash overlay used by alarm -->
+    <div id="flash-overlay" class="flash-overlay hidden" aria-hidden="true"></div>
+
     <script src="script.js"></script>
 </body>
 </html>
