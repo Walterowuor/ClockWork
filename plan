@@ -1,0 +1,10 @@
+host the website on local server over the net.
+dns on local net so any connected user can access it typing 'clock'
+i need it ultra secure, it must at no circumstance stream over port 80 always 443 on ssl and always encrypt data nomater now little!
+
+ the floating calendar must not go beyond screen size.and 
+ need to mighrate the events, weekdays date and everything under that tab to the floating  calendar
+
+ add an alarm setting icon alongside callendar and settings with a floating panel that rings loud with flashing screen when alarm time reaches
+
+ debug the notes panel and make it floatable (saves notes as .md files in the root directory automatically saves as user types). notes should have color palette too, allow obfuscation and deobfuscation, deleton, ammendment of notes, creation of new notes,attachments, hidden notes with secure 12 character pin, notes containing attachments are stored in seperate directories(make sure all features actually works) [any more suggestions are welcome]

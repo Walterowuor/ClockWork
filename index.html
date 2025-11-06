@@ -1,0 +1,217 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clock with Countdown and Calendar</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Fallback for unsupported backdrop-filter */
+        @supports not (backdrop-filter: blur(5px)) {
+            #content-layer, .floating-panel {
+                background: rgba(255, 255, 255, 0.2);
+            }
+            #content-layer::after {
+                content: "Your browser may not support the glass effect. Please use a modern browser for the best experience.";
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+                color: #fff;
+                font-size: 0.8rem;
+                opacity: 0.7;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="background-layer"></div>
+    <div id="content-layer">
+        <div class="controls">
+            <button id="calendar-toggle" aria-label="Toggle Calendar">🗓️</button>
+            <button id="settings-toggle" aria-label="Toggle Settings">⚙️</button>
+        </div>
+        <canvas id="analog-clock" width="300" height="300"></canvas>
+        <div id="time-area">
+            <div class="digital-clock" id="digital-clock">--:--:--</div>
+            <div class="countdown" id="countdown">00:00:00</div>
+            <div class="status-indicator" id="status-indicator"></div>
+        </div>
+        <div class="panel calendar-panel hidden" id="calendar-panel">
+            <div id="calendar-date"></div>
+            <div id="calendar-week"></div>
+            <div id="calendar-days-year"></div>
+            <div id="calendar-days-month"></div>
+            <div id="calendar-days-week"></div>
+            <div id="calendar-holiday"></div>
+            <div id="upcoming-events" style="margin-top: 12px; font-size: 0.85rem;"></div>
+        </div>
+        <div class="panel floating-panel monthly-calendar-panel hidden" id="monthly-calendar-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <button id="prev-month" style="background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer;">‹</button>
+                <h3 id="calendar-month-year" style="margin: 0; font-size: 1rem;"></h3>
+                <button id="next-month" style="background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer;">›</button>
+            </div>
+            <div id="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;"></div>
+        </div>
+        <div class="panel floating-panel dev-console hidden" id="dev-console">
+            <h3>🔓 Developer Console</h3>
+            <div class="row">
+                <label>Usage Statistics (Local Only)</label>
+                <div id="usage-stats" style="font-size: 0.85rem; color: rgba(255, 255, 255, 0.8);">
+                    <div>Total Countdowns: <span id="stat-total">0</span></div>
+                    <div>Total Time: <span id="stat-time">0</span> hours</div>
+                    <div>Most Used Preset: <span id="stat-preset">-</span></div>
+                    <div>Last Active: <span id="stat-last">Never</span></div>
+                </div>
+            </div>
+            <div class="row">
+                <label>Data Management</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn" id="export-data" style="background: linear-gradient(135deg, #00b894 0%, #00cec9 100%); flex: 1; min-width: 100px;">📤 Export Settings</button>
+                    <button class="btn" id="import-data" style="background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%); flex: 1; min-width: 100px;">📥 Import Settings</button>
+                    <button class="btn" id="clear-stats" style="background: linear-gradient(135deg, #d63031 0%, #e17055 100%); flex: 1; min-width: 100px;">🗑️ Clear Stats</button>
+                </div>
+            </div>
+            <div class="row">
+                <label>JSON Data (Holidays, Events, Plans)</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn" id="export-json" style="background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%); flex: 1; min-width: 100px;">📤 Export JSON</button>
+                    <button class="btn" id="import-json" style="background: linear-gradient(135deg, #fd79a8 0%, #e84393 100%); flex: 1; min-width: 100px;">📥 Import JSON</button>
+                    <button class="btn" id="reload-json" style="background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%); flex: 1; min-width: 100px;">🔄 Reload JSON</button>
+                </div>
+                <small style="color: rgba(255, 255, 255, 0.6); font-size: 0.8rem; margin-top: 4px; display: block;">Manage holidays, events, and plans from data.json</small>
+            </div>
+            <div class="row">
+                <label>Privacy Status</label>
+                <div style="font-size: 0.85rem; color: #2ecc71;">
+                    ✓ All data stored locally<br>
+                    ✓ No tracking or analytics<br>
+                    ✓ Zero external connections<br>
+                    ✓ Your data, your control
+                </div>
+            </div>
+        </div>
+        <div class="panel floating-panel hidden" id="settings-panel">
+            <h3>Settings</h3>
+            <div class="row">
+                <label>Quick Presets</label>
+                <div class="presets">
+                    <button class="preset-btn" data-minutes="1">1 min</button>
+                    <button class="preset-btn" data-minutes="5">5 min</button>
+                    <button class="preset-btn" data-minutes="10">10 min</button>
+                    <button class="preset-btn" data-minutes="15">15 min</button>
+                    <button class="preset-btn" data-minutes="30">30 min</button>
+                </div>
+            </div>
+            <div class="row">
+                <label>Countdown (HH:MM:SS)</label>
+                <div class="hhmmss">
+                    <input type="number" id="hours" min="0" max="23" placeholder="HH" aria-label="Hours">
+                    <input type="number" id="minutes" min="0" max="59" placeholder="MM" aria-label="Minutes">
+                    <input type="number" id="seconds" min="0" max="59" placeholder="SS" aria-label="Seconds">
+                </div>
+            </div>
+            <div class="row">
+                <label for="start-tick">Start Tick At (seconds left)</label>
+                <input type="number" id="start-tick" min="0" placeholder="Sec" aria-label="Start Tick Seconds">
+            </div>
+            <div class="row">
+                <label for="tick-profile">Tick Sound</label>
+                <select id="tick-profile" aria-label="Tick Sound Profile">
+                    <option value="classic">Classic</option>
+                    <option value="vintage">Vintage</option>
+                    <option value="modern">Modern</option>
+                    <option value="none">None</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="tick-pitch">Pitch: <span id="pitch-value">750</span> Hz</label>
+                <input type="range" id="tick-pitch" min="400" max="1600" value="750" aria-label="Tick Pitch">
+            </div>
+            <div class="row">
+                <label for="tick-volume">Volume: <span id="volume-value">0.05</span></label>
+                <input type="range" id="tick-volume" min="0" max="0.25" step="0.01" value="0.05" aria-label="Tick Volume">
+            </div>
+            <div class="row">
+                <label for="enable-sound">Enable Sound</label>
+                <input type="checkbox" id="enable-sound" checked aria-label="Enable Sound">
+            </div>
+            <div class="row">
+                <label for="bg-color">Background Color</label>
+                <div class="color-picker-container">
+                    <input type="color" id="bg-color" value="#1a1a2e" aria-label="Background Color">
+                    <div class="color-presets">
+                        <button class="color-preset-btn" data-color="#1a1a2e" style="background: #1a1a2e;" title="Default Dark"></button>
+                        <button class="color-preset-btn" data-color="#0f0f23" style="background: #0f0f23;" title="Deep Black"></button>
+                        <button class="color-preset-btn" data-color="#1a1a2e" style="background: #1a1a2e;" title="Navy Blue"></button>
+                        <button class="color-preset-btn" data-color="#2d1b4e" style="background: #2d1b4e;" title="Purple"></button>
+                        <button class="color-preset-btn" data-color="#1b4d3e" style="background: #1b4d3e;" title="Forest Green"></button>
+                        <button class="color-preset-btn" data-color="#4a1a1a" style="background: #4a1a1a;" title="Dark Red"></button>
+                        <button class="color-preset-btn" data-color="#2d2d1a" style="background: #2d2d1a;" title="Olive"></button>
+                        <button class="color-preset-btn" data-color="#1a1a1a" style="background: #1a1a1a;" title="Pure Black"></button>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <label for="secret-note">Secret Note (Encrypted)</label>
+                <textarea id="secret-note" placeholder="Your encrypted note for this countdown..." rows="3"></textarea>
+                <small style="color: rgba(255, 255, 255, 0.6); font-size: 0.8rem; margin-top: 4px; display: block;">Stored locally & encrypted</small>
+            </div>
+            <div class="row">
+                <label>
+                    <input type="checkbox" id="stealth-mode"> Stealth Mode (Minimal UI)
+                </label>
+            </div>
+            <div class="row" id="dev-mode-row" style="display: none;">
+                <label>Developer Console</label>
+                <button class="btn" id="toggle-dev-console" style="background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);">🔓 Advanced Mode</button>
+            </div>
+            <div class="actions">
+                <button class="btn start" id="start-countdown">Start Countdown</button>
+                <button class="btn stop" id="stop-countdown">Stop</button>
+                <button class="btn reset" id="reset-countdown">Reset</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
